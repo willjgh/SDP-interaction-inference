@@ -7,6 +7,8 @@ Module implementing classes to handle optimization inference method.
 # ------------------------------------------------
 
 from SDP_interaction_inference import optimization_utils
+from SDP_interaction_inference import utils
+from SDP_interaction_inference.constraints import Constraint
 import json
 import tqdm
 import numpy as np
@@ -38,7 +40,7 @@ status_codes = {
 }
 
 # ------------------------------------------------
-# Optimization class
+# General Optimization class
 # ------------------------------------------------
 
 class Optimization():
@@ -53,35 +55,41 @@ class Optimization():
         S,
         U,
         d,
-        fixed=[],
+        fixed,
+        license_file=None,
         time_limit=300,
         eval_eps=10**-6,
-        print_solution=False,
-        license_file=None,
-        silent=True,
         K=100,
-        tqdm_disable=False,
-        compute_IIS=False,
-        write_model=False):
+        silent=True,
+        printing=False,
+        tqdm_disable=False
+        ):
         '''Initialize analysis settings and result storage.'''
         
         # store reference to dataset
         self.dataset = dataset
 
-        # constraint settings
+        # model settings
         self.constraints = constraints
+        self.reactions = reactions
+        self.vrs = vrs
+        self.db = db
+        self.R = R
+        self.S = S
+        self.U = U
+        self.d = d
+        self.fixed = fixed
 
-        # add storage of other attributes
-
-        # analysis settings
+        # optimization settings
         self.license_file = license_file
         self.time_limit = time_limit
-        self.silent = silent
+        self.eval_eps = eval_eps
         self.K = K
+
+        # display settings
+        self.silent = silent
+        self.printing = printing
         self.tqdm_disable = tqdm_disable
-        self.print_solution = print_solution
-        self.compute_IIS = compute_IIS
-        self.write_model = write_model
 
         # analyse dataset
         self.analyse_dataset()
@@ -128,36 +136,21 @@ class Optimization():
             Infeasible: add cutting plane and return to NLP step
 
         Args:
-            OB_bounds: confidence intervals on observed moments up to order d (at least)
-            beta: capture efficiency vector
-            reactions: list of strings detailing a_r(x) for each reaction r
-            vrs: list of lists detailing v_r for each reaction r
-            db: largest order a_r(x)
-            R: number of reactions
-            S: number of species
-            U: indices of unobserved species
-            d: maximum moment order used
-            fixed: list of pairs of (reaction index r, value to fix k_r to)
-            time_limit: optimization time limit
-
-            constraint options
-
-            moment_bounds: CI bounds on moments
-            moment_matrices: 
-            moment_equations
-            factorization
-            factorization_telegraph
-            telegraph_moments
-
-            optimization options
-
-            print_evals: toggle printing of moment matrix eigenvalues
-            printing: toggle printing of feasibility status
-            eval_eps: threshold of allowed negative eigenvalues for semidefinite
+            i: index of dataset sample to test
             
         Returns:
             dictionary of feasibility status and optimization time
         '''
+
+        # get moment bounds for sample i
+        OB_bounds = self.dataset.moment_bounds[f'sample-{i}']
+
+        # raise exception if moments not available
+        if self.d > self.dataset.d:
+            raise Exception(f"Optimization d = {self.d} too high for dataset d = {self.dataset.d}")
+        
+        # adjust S = 2, U = [] bounds to optimization S, U (up to order d)
+        OB_bounds = optimization_utils.bounds_adjust(OB_bounds, self.S, self.U, self.d)
 
         # if provided load WLS license credentials
         if self.license_file:
@@ -183,27 +176,13 @@ class Optimization():
             with gp.Model('test-SDP', env=env) as model:
 
                 # construct base model (no semidefinite constraints)
-                model, variables = optimization_utils.base_model(
-                     model,
-                     self.constraints,
-                     self.dataset.moment_bounds[f'sample-{i}'],
-                     self.dataset.beta,
-                     self.reactions,
-                     self.vrs,
-                     self.db,
-                     self.R,
-                     self.S,
-                     self.U,
-                     self.d,
-                     self.fixed,
-                     self.time_limit
-                )
+                model, variables = optimization_utils.base_model(self, model, OB_bounds)
                 
                 # check feasibility
                 model, status = optimization_utils.optimize(model)
 
                 # no semidefinite constraints: just return status
-                if not self.constraints['moment_matrices']:
+                if not self.constraints.moment_matrices:
 
                     if self.printing: print(status)
 
@@ -219,14 +198,7 @@ class Optimization():
                     if self.printing: print("NLP feasible")
 
                     # check semidefinite feasibility
-                    model, semidefinite_feas = optimization_utils.semidefinite_cut(
-                        model,
-                        variables,
-                        self.S,
-                        self.print_evals,
-                        self.eval_eps,
-                        self.printing
-                    )
+                    model, semidefinite_feas = optimization_utils.semidefinite_cut(self, model, variables)
 
                     # semidefinite feasible
                     if semidefinite_feas:
@@ -253,8 +225,224 @@ class Optimization():
                 solution['status'] = status
 
                 # print
-                if self.print_solution:
+                if self.printing:
                     print(f"Optimization status: {solution['status']}")
                     print(f"Runtime: {solution['time']}")
 
                 return status
+            
+# ------------------------------------------------
+# Birth-Death Optimization subclass
+# ------------------------------------------------
+
+class BirthDeathOptimization(Optimization):
+
+    def __init__(
+        self,
+        dataset,
+        d,
+        fixed=None,
+        constraints=None,
+        license_file=None,
+        time_limit=300,
+        eval_eps=10**-6,
+        K=100,
+        silent=True,
+        printing=False,
+        tqdm_disable=False
+        ):
+
+        # birth death settings
+        reactions = [
+            "1",
+            "xs[0]",
+            "1",
+            "xs[1]",
+            "xs[0] * xs[1]"
+        ]
+        vrs = [
+            [1, 0],
+            [-1, 0],
+            [0, 1],
+            [0, -1],
+            [-1, -1]
+        ]
+        db = 2
+        R = 5
+        S = 2
+        U = []
+
+        # default constraints if not modified
+        if not constraints:
+            constraints = Constraint(
+                moment_bounds=True,
+                moment_matrices=True,
+                moment_equations=True
+            )
+
+        # default fixed values if not modified
+        if not fixed:
+            fixed = [(1, 1)]
+
+        super().__init__(
+            dataset,
+            constraints,
+            reactions,
+            vrs,
+            db,
+            R,
+            S,
+            U,
+            d,
+            fixed,
+            license_file,
+            time_limit,
+            eval_eps,
+            K,
+            silent,
+            printing,
+            tqdm_disable
+        )
+
+# ------------------------------------------------
+# Telegraph Optimization subclass
+# ------------------------------------------------
+
+class TelegraphOptimization(Optimization):
+
+    def __init__(
+        self,
+        dataset,
+        d,
+        fixed=None,
+        constraints=None,
+        license_file=None,
+        time_limit=300,
+        eval_eps=10**-6,
+        K=100,
+        silent=True,
+        printing=False,
+        tqdm_disable=False
+        ):
+
+        # telegraph settings
+        reactions = [
+            "1 - xs[2]",
+            "xs[2]",
+            "xs[2]",
+            "xs[0]",
+            "1 - xs[3]",
+            "xs[3]",
+            "xs[3]",
+            "xs[1]",
+            "xs[0] * xs[1]"
+        ]
+        vrs = [
+            [0, 0, 1, 0],
+            [0, 0, -1, 0],
+            [1, 0, 0, 0],
+            [-1, 0, 0, 0],
+            [0, 0, 0, 1],
+            [0, 0, 0, -1],
+            [0, 1, 0, 0],
+            [0, -1, 0, 0],
+            [-1, -1, 0, 0]
+        ]
+        db = 2
+        R = 9
+        S = 4
+        U = [2, 3]
+
+        # default constraints if not modified
+        if not constraints:
+            constraints = Constraint(
+                moment_bounds=True,
+                moment_matrices=True,
+                moment_equations=True,
+                telegraph_moments=True
+            )
+
+        # default fixed values if not modified
+        if not fixed:
+            fixed = [(3, 1)]
+
+        super().__init__(
+            dataset,
+            constraints,
+            reactions,
+            vrs,
+            db,
+            R,
+            S,
+            U,
+            d,
+            fixed,
+            license_file,
+            time_limit,
+            eval_eps,
+            K,
+            silent,
+            printing,
+            tqdm_disable
+        )
+
+# ------------------------------------------------
+# Model-free Optimization subclass
+# ------------------------------------------------
+
+class ModelFreeOptimization(Optimization):
+
+    def __init__(
+        self,
+        dataset,
+        d,
+        fixed=None,
+        constraints=None,
+        license_file=None,
+        time_limit=300,
+        eval_eps=10**-6,
+        K=100,
+        silent=True,
+        printing=False,
+        tqdm_disable=False
+        ):
+
+        # telegraph settings
+        reactions = []
+        vrs = []
+        db = 0
+        R = 0
+        S = 2
+        U = []
+
+        # default constraints if not modified
+        if not constraints:
+            constraints = Constraint(
+                moment_bounds=True,
+                moment_matrices=True,
+                factorization=True
+            )
+
+        # default fixed values if not modified
+        if not fixed:
+            fixed = []
+
+        super().__init__(
+            dataset,
+            constraints,
+            reactions,
+            vrs,
+            db,
+            R,
+            S,
+            U,
+            d,
+            fixed,
+            license_file,
+            time_limit,
+            eval_eps,
+            K,
+            silent,
+            printing,
+            tqdm_disable
+        )
