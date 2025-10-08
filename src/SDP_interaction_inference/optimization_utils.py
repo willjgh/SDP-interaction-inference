@@ -175,17 +175,62 @@ def construct_M_s(y, s, S, d):
     return M_s
 
 # ------------------------------------------------
+# Bounds adjustment
+# ------------------------------------------------
+
+def bounds_adjust(OB_bounds, S, U, d):
+    '''
+    Bootstrap gives (2, Nd) array of moments for S = 2, U = [].
+    Adjust data into array of moment for different S and U
+    '''
+
+    # helpful values
+    Nd = utils.compute_Nd(S, d)
+    powers_S = utils.compute_powers(S, d)
+    powers_2 = utils.compute_powers(2, d)
+
+    # observed indices
+    O = [i for i in range(S) if i not in U]
+
+    # adjust bounds
+    y_bounds = np.zeros((2, Nd))
+    for i, alpha_S in enumerate(powers_S):
+
+        # check if unobserved species present in moment
+        unobserved_moment = False
+        for j, alpha_j in enumerate(alpha_S):
+            if (j in U) and (alpha_j > 0):
+                unobserved_moment = True
+
+        # unobserved: [0, inf] bounds
+        if unobserved_moment:
+            y_bounds[:, i] = np.array([0, np.inf])
+
+        # otherwise: use data
+        else:
+
+            # get power for S = 2
+            alpha_2 = [alpha_S[i] for i in O]
+            j = powers_2.index(alpha_2)
+            y_bounds[:, i] = OB_bounds[:, j]
+
+    return y_bounds
+
+# ------------------------------------------------
 # General base model
 # ------------------------------------------------
 
-def base_model(model, constraints, OB_bounds, beta, reactions, vrs, db, R, S, U, d, fixed=[], time_limit=300):
+def base_model(opt, model, OB_bounds):
     '''
     Construct 'base model' with semidefinite constraints removed to give NLP
 
     Args:
+        opt: Optimization class (or subclass), see relevant attributes
         model: empty gurobi model object
-        constraints: dict of constraint options (see below)
         OB_bounds: confidence intervals on observed moments up to order d (at least)
+
+        Relevant class attributes
+
         beta: capture efficiency vector
         reactions: list of strings detailing a_r(x) for each reaction r
         vrs: list of lists detailing v_r for each reaction r
@@ -206,22 +251,20 @@ def base_model(model, constraints, OB_bounds, beta, reactions, vrs, db, R, S, U,
         factorization_telegraph
         telegraph_moments
 
-
     Returns:
         model: gurobi model object with NLP constraints (all but semidefinite)
         variables: dict for model variable reference
     '''
 
     # model settings
-    model.Params.TimeLimit = time_limit
-    K = 100
+    model.Params.TimeLimit = opt.time_limit
 
     # helpful values
-    Nd = utils.compute_Nd(S, d)
+    Nd = utils.compute_Nd(opt.S, opt.d)
 
     # variables
     y = model.addMVar(shape=Nd, vtype=GRB.CONTINUOUS, name="y", lb=0)
-    k = model.addMVar(shape=R, vtype=GRB.CONTINUOUS, name="k", lb=0, ub=K)
+    k = model.addMVar(shape=opt.R, vtype=GRB.CONTINUOUS, name="k", lb=0, ub=opt.K)
 
     # variable dict
     variables = {
@@ -229,40 +272,40 @@ def base_model(model, constraints, OB_bounds, beta, reactions, vrs, db, R, S, U,
         'k': k
     }
 
-    if constraints['moment_matrices']:
+    if opt.constraints.moment_matrices:
 
         # moment matrices
-        for s in range(S + 1):
-            M_s = construct_M_s(y, s, S, d)
+        for s in range(opt.S + 1):
+            M_s = construct_M_s(y, s, opt.S, opt.d)
             variables[f'M_{s}'] = M_s
     
     # constraints
 
-    if constraints['moment_bounds']:
-    
-        # confidence interval bounds on OB moments (up to order d)
-        y_lb = OB_bounds[0, :Nd]
-        y_ub = OB_bounds[1, :Nd]
+    if opt.constraints.moment_bounds:
+
+        # get CI bounds on OB moments (up to order d)
+        y_lb = OB_bounds[0, :]
+        y_ub = OB_bounds[1, :]
 
         # B scaling matrix
-        B = compute_B(beta, S, U, d)
+        B = compute_B(opt.dataset.beta, opt.S, opt.U, opt.d)
 
         # moment bounds
         model.addConstr(B @ y <= y_ub, name="y_UB")
         model.addConstr(B @ y >= y_lb, name="y_LB")
 
-    if constraints['moment_equations']:
+    if opt.constraints.moment_equations:
 
         # moment equations (order(alpha) <= d - db + 1)
-        moment_powers = utils.compute_powers(S, d - db + 1)
+        moment_powers = utils.compute_powers(opt.S, opt.d - opt.db + 1)
         for alpha in moment_powers:
-            A_alpha_d = compute_A(alpha, reactions, vrs, db, R, S, d)
-            model.addConstr(k.T @ A_alpha_d @ y == 0, name=f"ME_{alpha}_{d}")
+            A_alpha_d = compute_A(alpha, opt.reactions, opt.vrs, opt.db, opt.R, opt.S, opt.d)
+            model.addConstr(k.T @ A_alpha_d @ y == 0, name=f"ME_{alpha}_{opt.d}")
 
-    if constraints['factorization']:
+    if opt.constraints.factorization:
 
         # factorization bounds
-        powers = utils.compute_powers(S, d)
+        powers = utils.compute_powers(opt.S, opt.d)
         for i, alpha in enumerate(powers):
 
             # E[X1^a1 X2^a2] = E[X1^a1] E[X2^a2]
@@ -271,10 +314,10 @@ def base_model(model, constraints, OB_bounds, beta, reactions, vrs, db, R, S, U,
                 l = powers.index([0, alpha[1]])
                 model.addConstr(y[i] == y[j] * y[l], name=f"Moment_factorization_{alpha[0]}_({alpha[1]})")
 
-    if constraints['factorization_telegraph']:
+    if opt.constraints.telegraph_factorization:
 
         # factorization bounds
-        powers = utils.compute_powers(S, d)
+        powers = utils.compute_powers(opt.S, opt.d)
         for i, alpha in enumerate(powers):
 
             # E[X1^a1 X2^a2 G1^a3 G2^a4] = E[X1^a1 G1^a3] E[X2^a2 G2^a4]
@@ -283,10 +326,10 @@ def base_model(model, constraints, OB_bounds, beta, reactions, vrs, db, R, S, U,
                 l = powers.index([0, alpha[1], 0, alpha[3]])
                 model.addConstr(y[i] == y[j] * y[l], name=f"Moment_factorization_{alpha[0], alpha[2]}_({alpha[1], alpha[3]})")
 
-    if constraints['telegraph']:
+    if opt.constraints.telegraph_moments:
 
         # telegraph moment equality (as Gi in {0, 1}, E[Gi^n] = E[Gi] for n > 0, same with cross moments)
-        powers = utils.compute_powers(S, d)
+        powers = utils.compute_powers(opt.S, opt.d)
         for i, alpha in enumerate(powers):
 
             # G1, G2 powers > 0: equal to powers of 1
@@ -308,7 +351,7 @@ def base_model(model, constraints, OB_bounds, beta, reactions, vrs, db, R, S, U,
     model.addConstr(y[0] == 1, name="y0_base")
 
     # fixed parameters
-    for r, val in fixed:
+    for r, val in opt.fixed:
         model.addConstr(k[r] == val, name=f"k{r}_fixed")
 
     return model, variables
@@ -327,7 +370,7 @@ def optimize(model):
 
     return model, status
 
-def semidefinite_cut(model, variables, S, print_evals=False, eval_eps=10**-6, printing=False):
+def semidefinite_cut(opt, model, variables):
     '''
     Check semidefinite feasibility of NLP feasible point
     Feasible: stop
@@ -347,49 +390,49 @@ def semidefinite_cut(model, variables, S, print_evals=False, eval_eps=10**-6, pr
     data = []
 
     # moment matrix values
-    for s in range(S + 1):
+    for s in range(opt.S + 1):
         data.append(
             {f'M_val': variables[f'M_{s}'].X}
         )
 
     # eigen information
-    for s in range(S + 1):
+    for s in range(opt.S + 1):
         evals_s, evecs_s = np.linalg.eigh(data[s]['M_val'])
         data[s]['evals'] = evals_s
         data[s]['evecs'] = evecs_s
 
-    if print_evals:
+    if opt.printing:
         print("Moment matices eigenvalues:")
-        for s in range(S + 1):
+        for s in range(opt.S + 1):
             print(data[s]['evals'])
 
     # check if all positive eigenvalues
     positive = True
-    for s in range(S + 1):
-        if not (data[s]['evals'] >= -eval_eps).all():
+    for s in range(opt.S + 1):
+        if not (data[s]['evals'] >= -opt.eval_eps).all():
             positive = False
             break
 
     # positive eigenvalues
     if positive:
 
-        if printing: print("SDP feasible\n")
+        if opt.printing: print("SDP feasible\n")
     
         return model, True
 
     # negative eigenvalue
     else:
 
-        if printing: print("SDP infeasible\n")
+        if opt.printing: print("SDP infeasible\n")
 
         # for each matrix
-        for s in range(S + 1):
+        for s in range(opt.S + 1):
 
             # for each M_s eigenvalue
             for i, lam in enumerate(data[s]['evals']):
 
                 # if negative (sufficiently)
-                if lam < -eval_eps:
+                if lam < -opt.eval_eps:
 
                     # get evector
                     v = data[s]['evecs'][:, i]
@@ -397,8 +440,8 @@ def semidefinite_cut(model, variables, S, print_evals=False, eval_eps=10**-6, pr
                     # add cutting plane
                     model.addConstr(v.T @ variables[f'M_{s}'] @ v >= 0, name=f"Cut_{s}")
                 
-                    if printing: print(f"M_{s} cut added")
+                    if opt.printing: print(f"M_{s} cut added")
 
-        if printing: print("")
+        if opt.printing: print("")
 
     return model, False
