@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "SDP-interaction-inference"
+version = "0.0.1"
+description = "Infer gene interaction via semidefinite programming"
+licence = {file = "LICENSE"}
+readme = "README.md"
+
+authors = [
+  { name="William Hilton", email="williamjgh2000@gmail.com" },
+]
+
+keywords = ["scRNA-seq", "inference", "optimization", "semidefinite-programming"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+    "scipy",
+    "sympy",
+    "matplotlib",
+    "gurobipy==12.0.1",
+    "pandas",
+    "tqdm",
+    "seaborn",
+    "Jinja2"
+]
+
+[project.optional-dependencies]
+
+[project.urls]
+Repository = "https://github.com/willjgh/SDP-interaction-inference"
