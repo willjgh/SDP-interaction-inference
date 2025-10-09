@@ -21,7 +21,7 @@ bounds = bootstrap(sample)
 import numpy as np
 import matplotlib.pyplot as plt
 from ast import literal_eval
-from interaction_inference import utils
+from SDP_interaction_inference import utils
 
 # ------------------------------------------------
 # Bootstrap moments
