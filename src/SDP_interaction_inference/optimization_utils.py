@@ -401,6 +401,10 @@ def semidefinite_cut(opt, model, variables):
         data[s]['evals'] = evals_s
         data[s]['evecs'] = evecs_s
 
+    # record smallest evalues
+    smallest_evals = [data[s]['evals'][0] for s in range(opt.S + 1)]
+    opt.eigenvalues.append(smallest_evals)
+
     if opt.printing:
         print("Moment matices eigenvalues:")
         for s in range(opt.S + 1):
