@@ -181,14 +181,14 @@ class Optimization():
                 # check feasibility
                 model, status = optimization_utils.optimize(model)
 
+                # collect solution information
+                solution['status'] = status
+                solution['time'] = model.Runtime
+
                 # no semidefinite constraints: just return status
                 if not self.constraints.moment_matrices:
 
                     if self.printing: print(status)
-
-                    # collect solution information
-                    solution['status'] = status
-                    solution['time'] = model.Runtime
 
                     return solution
 
