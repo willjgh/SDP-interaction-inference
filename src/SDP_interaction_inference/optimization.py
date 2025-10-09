@@ -91,8 +91,11 @@ class Optimization():
         self.printing = printing
         self.tqdm_disable = tqdm_disable
 
+        # debugging
+        self.eigenvalues = []
+
         # analyse dataset
-        self.analyse_dataset()
+        #self.analyse_dataset()
 
 
     def analyse_dataset(self):
