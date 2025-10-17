@@ -11,6 +11,7 @@ from gurobipy import GRB
 import sympy as sp
 import numpy as np
 import math
+import time
 
 status_codes = {
     1: 'LOADED',
@@ -442,6 +443,7 @@ def semidefinite_cut(opt, model, variables):
                     v = data[s]['evecs'][:, i]
 
                     # add cutting plane
+                    #model.addConstr(np.kron(v, v.T) @ variables[f'M_{s}'].reshape(-1) >= 0, name=f"Cut_{s}")
                     model.addConstr(v.T @ variables[f'M_{s}'] @ v >= 0, name=f"Cut_{s}")
                 
                     if opt.printing: print(f"M_{s} cut added")
