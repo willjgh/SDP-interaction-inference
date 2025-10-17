@@ -59,6 +59,7 @@ class Optimization():
         license_file=None,
         time_limit=300,
         eval_eps=10**-6,
+        cut_limit=100,
         K=100,
         silent=True,
         printing=False,
@@ -84,6 +85,7 @@ class Optimization():
         self.license_file = license_file
         self.time_limit = time_limit
         self.eval_eps = eval_eps
+        self.cut_limit = cut_limit
         self.K = K
 
         # display settings
@@ -128,7 +130,7 @@ class Optimization():
         self.result_dict = solution_dict
 
 
-    def feasibility_test(self, i):
+    def feasibility_test_old(self, i):
         '''
         Full feasibility test of birth death model via following algorithm
 
@@ -233,6 +235,108 @@ class Optimization():
                     print(f"Runtime: {solution['time']}")
 
                 return status
+
+    def feasibility_test(self, i):
+        '''
+        Full feasibility test of birth death model via following algorithm
+
+        Optimize NLP
+        Infeasible: stop
+        Feasible: check SDP feasibility
+            Feasible: stop
+            Infeasible: add cutting plane and return to NLP step
+
+        Args:
+            i: index of dataset sample to test
+            
+        Returns:
+            dictionary of feasibility status and optimization time
+        '''
+
+        # get moment bounds for sample i
+        OB_bounds = self.dataset.moment_bounds[f'sample-{i}']
+
+        # raise exception if moments not available
+        if self.d > self.dataset.d:
+            raise Exception(f"Optimization d = {self.d} too high for dataset d = {self.dataset.d}")
+        
+        # adjust S = 2, U = [] bounds to optimization S, U (up to order d)
+        OB_bounds = optimization_utils.bounds_adjust(OB_bounds, self.S, self.U, self.d)
+
+        # if provided load WLS license credentials
+        if self.license_file:
+            environment_parameters = json.load(open(self.license_file))
+        # otherwise use default environment (e.g Named User license)
+        else:
+            environment_parameters = {}
+ 
+        # silence output
+        if self.silent:
+            environment_parameters['OutputFlag'] = 0
+
+        # environment context
+        with gp.Env(params=environment_parameters) as env:
+
+            # model context
+            with gp.Model('test-SDP', env=env) as model:
+
+                # construct base model (no semidefinite constraints)
+                model, variables = optimization_utils.base_model(self, model, OB_bounds)
+                
+                # check feasibility
+                model, status = optimization_utils.optimize(model)
+
+                # collect solution information
+                solution = {
+                    'status': status,
+                    'time': model.Runtime
+                }
+
+                # no semidefinite constraints or non-optimal solution: return NLP status
+                if not (self.constraints.moment_matrices and status == "OPTIMAL"):
+
+                    return solution
+                
+                # record number of iterations
+                cuts = 0
+
+                # while below limit
+                while cuts < self.cut_limit:
+
+                    # check semidefinite feasibility & add cuts if needed
+                    model, semidefinite_feas = optimization_utils.semidefinite_cut(self, model, variables)
+
+                    # cut
+                    cuts += 1
+
+                    # semidefinite feasible: return
+                    if semidefinite_feas:
+
+                        return solution
+                    
+                    # semidefinite infeasible: check NLP feasibility with added cut
+                    model, status = optimization_utils.optimize(model)
+
+                    # update optimization time
+                    solution['time'] += model.Runtime
+
+                    # NLP + cut infeasible: return
+                    if status == "INFEASIBLE":
+
+                        # update solution
+                        solution['status'] = status
+
+                        return solution
+
+                # set status: exceeded number of cutting plane iterations
+                solution['status'] = "CUT_LIMIT"
+
+                # print
+                if self.printing:
+                    print(f"Optimization status: {solution['status']}")
+                    print(f"Runtime: {solution['time']}")
+
+                return solution
             
 # ------------------------------------------------
 # Birth-Death Optimization subclass
@@ -249,6 +353,7 @@ class BirthDeathOptimization(Optimization):
         license_file=None,
         time_limit=300,
         eval_eps=10**-6,
+        cut_limit=100,
         K=100,
         silent=True,
         printing=False,
@@ -301,6 +406,7 @@ class BirthDeathOptimization(Optimization):
             license_file,
             time_limit,
             eval_eps,
+            cut_limit,
             K,
             silent,
             printing,
@@ -322,6 +428,7 @@ class TelegraphOptimization(Optimization):
         license_file=None,
         time_limit=300,
         eval_eps=10**-6,
+        cut_limit=100,
         K=100,
         silent=True,
         printing=False,
@@ -383,6 +490,7 @@ class TelegraphOptimization(Optimization):
             license_file,
             time_limit,
             eval_eps,
+            cut_limit,
             K,
             silent,
             printing,
@@ -404,6 +512,7 @@ class ModelFreeOptimization(Optimization):
         license_file=None,
         time_limit=300,
         eval_eps=10**-6,
+        cut_limit=100,
         K=100,
         silent=True,
         printing=False,
@@ -444,6 +553,7 @@ class ModelFreeOptimization(Optimization):
             license_file,
             time_limit,
             eval_eps,
+            cut_limit,
             K,
             silent,
             printing,
