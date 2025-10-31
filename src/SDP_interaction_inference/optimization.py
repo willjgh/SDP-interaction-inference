@@ -58,6 +58,7 @@ class Optimization():
         fixed,
         license_file=None,
         time_limit=300,
+        total_time_limit=300,
         eval_eps=10**-6,
         cut_limit=100,
         K=100,
@@ -84,6 +85,7 @@ class Optimization():
         # optimization settings
         self.license_file = license_file
         self.time_limit = time_limit
+        self.total_time_limit = total_time_limit
         self.eval_eps = eval_eps
         self.cut_limit = cut_limit
         self.K = K
@@ -123,7 +125,8 @@ class Optimization():
                 # store default result
                 solution_dict[i] = {
                     'status': None,
-                    'time': 0.0
+                    'time': None,
+                    'cuts': None
                 }
 
         # store as attribute
@@ -171,7 +174,8 @@ class Optimization():
         # collect solution information
         solution = {
             'status': None,
-            'time': None
+            'time': None,
+            'cuts': None
         }
 
         # environment context
@@ -289,25 +293,23 @@ class Optimization():
                 # collect solution information
                 solution = {
                     'status': status,
-                    'time': model.Runtime
+                    'time': model.Runtime,
+                    'cuts': 0
                 }
 
                 # no semidefinite constraints or non-optimal solution: return NLP status
                 if not (self.constraints.moment_matrices and status == "OPTIMAL"):
 
                     return solution
-                
-                # record number of iterations
-                cuts = 0
 
-                # while below limit
-                while cuts < self.cut_limit:
+                # while below time and cut limit
+                while (solution['cuts'] < self.cut_limit) and (solution['time'] < self.total_time_limit):
 
                     # check semidefinite feasibility & add cuts if needed
                     model, semidefinite_feas = optimization_utils.semidefinite_cut(self, model, variables)
 
                     # cut
-                    cuts += 1
+                    solution['cuts'] += 1
 
                     # semidefinite feasible: return
                     if semidefinite_feas:
@@ -321,15 +323,24 @@ class Optimization():
                     solution['time'] += model.Runtime
 
                     # NLP + cut infeasible: return
-                    if status == "INFEASIBLE":
+                    # (also return for any other status, can only proceed if optimal as need feasible point)
+                    if not (status == "OPTIMAL"):
 
                         # update solution
                         solution['status'] = status
 
                         return solution
 
-                # set status: exceeded number of cutting plane iterations
-                solution['status'] = "CUT_LIMIT"
+                # set custom status
+                if solution['cuts'] >= self.cut_limit:
+
+                    # exceeded number of cutting plane iterations
+                    solution['status'] = "CUT_LIMIT"
+                
+                elif solution['time'] >= self.total_time_limit:
+
+                    # exceeded total optimization time
+                    solution['status'] = "TOTAL_TIME_LIMIT"
 
                 # print
                 if self.printing:
@@ -352,6 +363,7 @@ class BirthDeathOptimization(Optimization):
         constraints=None,
         license_file=None,
         time_limit=300,
+        total_time_limit=300,
         eval_eps=10**-6,
         cut_limit=100,
         K=100,
@@ -405,6 +417,7 @@ class BirthDeathOptimization(Optimization):
             fixed,
             license_file,
             time_limit,
+            total_time_limit,
             eval_eps,
             cut_limit,
             K,
@@ -427,6 +440,7 @@ class TelegraphOptimization(Optimization):
         constraints=None,
         license_file=None,
         time_limit=300,
+        total_time_limit=300,
         eval_eps=10**-6,
         cut_limit=100,
         K=100,
@@ -489,6 +503,7 @@ class TelegraphOptimization(Optimization):
             fixed,
             license_file,
             time_limit,
+            total_time_limit,
             eval_eps,
             cut_limit,
             K,
@@ -511,6 +526,7 @@ class ModelFreeOptimization(Optimization):
         constraints=None,
         license_file=None,
         time_limit=300,
+        total_time_limit=300,
         eval_eps=10**-6,
         cut_limit=100,
         K=100,
@@ -552,6 +568,7 @@ class ModelFreeOptimization(Optimization):
             fixed,
             license_file,
             time_limit,
+            total_time_limit,
             eval_eps,
             cut_limit,
             K,
