@@ -23,3 +23,4 @@ class Constraint:
     factorization: bool = False
     telegraph_factorization: bool = False
     telegraph_moments: bool = False
+    telegraph_moments_ineq:bool = False
