@@ -284,6 +284,7 @@ def base_model(opt, model, OB_bounds):
 
     if opt.constraints.moment_bounds:
 
+        '''
         # get CI bounds on OB moments (up to order d)
         y_lb = OB_bounds[0, :]
         y_ub = OB_bounds[1, :]
@@ -294,6 +295,39 @@ def base_model(opt, model, OB_bounds):
         # moment bounds
         model.addConstr(B @ y <= y_ub, name="y_UB")
         model.addConstr(B @ y >= y_lb, name="y_LB")
+        '''
+
+        # Alternate method:
+        # do not adjust bounds (in optimization.py)
+        # define downsampled moments y_d = B @ y
+        # only explicitly bound observed, leave unobserved unbounded
+        # avoids issues with e+100 upper bounds on unobserved moments
+        # ------------------------------------------------------------
+
+        # B scaling matrix
+        B = compute_B(opt.dataset.beta, opt.S, opt.U, opt.d)
+
+        # downsampled moments
+        y_D = B @ y
+
+        # bound
+        O = [i for i in range(opt.S) if i not in opt.U]
+        powers_S = utils.compute_powers(opt.S, opt.d)
+        powers_2 = utils.compute_powers(2, opt.d)
+        for i, alpha_S in enumerate(powers_S):
+            # check if unobserved moment (non-zero power of unobserved species)
+            observed = True
+            for j, alpha_j in enumerate(alpha_S):
+                if (j in opt.U) and (alpha_j > 0):
+                    observed = False
+            # observed: bound
+            if observed:
+                alpha_2 = [alpha_S[i] for i in O]
+                j = powers_2.index(alpha_2)
+                model.addConstr(y_D[i] <= OB_bounds[1, j], name=f"y_{i}_UB")
+                model.addConstr(y_D[i] >= OB_bounds[0, j], name=f"y_{i}_LB")
+
+        # -------------------------------------------------------------
 
     if opt.constraints.moment_equations:
 
@@ -347,6 +381,45 @@ def base_model(opt, model, OB_bounds):
             elif (alpha[3] > 0):
                 j = powers.index([alpha[0], alpha[1], alpha[2], 1])
                 model.addConstr(y[i] == y[j], name="Telegraph_moment_equality_G2")
+
+    if opt.constraints.telegraph_moments_ineq:
+
+        # telegraph moment inequality (as Gi in {0, 1}, E[... Gi] <= E[...])
+        powers = utils.compute_powers(opt.S, opt.d)
+        for alpha_1 in range(opt.d + 1):
+            for alpha_2 in range(opt.d - alpha_1 + 1):
+
+                # E[... G1 G2] <= E[... G1]
+                try:
+                    i = powers.index([alpha_1, alpha_2, 1, 1])
+                    j = powers.index([alpha_1, alpha_2, 1, 0])
+                    model.addConstr(y[i] <= y[j], name="Telegraph_moment_inequality_G1G2_G1")
+                except ValueError:
+                    pass
+
+                # E[... G1 G2] <= E[... G2]
+                try:
+                    i = powers.index([alpha_1, alpha_2, 1, 1])
+                    r = powers.index([alpha_1, alpha_2, 0, 1])
+                    model.addConstr(y[i] <= y[r], name="Telegraph_moment_inequality_G1G2_G2")
+                except ValueError:
+                    pass
+
+                # E[... G1] <= E[...]
+                try:
+                    j = powers.index([alpha_1, alpha_2, 1, 0])
+                    s = powers.index([alpha_1, alpha_2, 0, 0])
+                    model.addConstr(y[j] <= y[s], name="Telegraph_moment_inequality_G1")
+                except ValueError:
+                    pass
+
+                # E[... G2] <= E[...]
+                try:
+                    r = powers.index([alpha_1, alpha_2, 0, 1])
+                    s = powers.index([alpha_1, alpha_2, 0, 0])
+                    model.addConstr(y[r] <= y[s], name="Telegraph_moment_inequality_G2")
+                except ValueError:
+                    pass
 
     # fixed moment
     model.addConstr(y[0] == 1, name="y0_base")
