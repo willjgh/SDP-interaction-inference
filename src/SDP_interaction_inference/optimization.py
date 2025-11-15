@@ -64,6 +64,7 @@ class Optimization():
         K=100,
         silent=True,
         printing=False,
+        write_model=False,
         tqdm_disable=False
         ):
         '''Initialize analysis settings and result storage.'''
@@ -93,6 +94,7 @@ class Optimization():
         # display settings
         self.silent = silent
         self.printing = printing
+        self.write_model = write_model
         self.tqdm_disable = tqdm_disable
 
         # debugging
@@ -265,7 +267,7 @@ class Optimization():
             raise Exception(f"Optimization d = {self.d} too high for dataset d = {self.dataset.d}")
         
         # adjust S = 2, U = [] bounds to optimization S, U (up to order d)
-        OB_bounds = optimization_utils.bounds_adjust(OB_bounds, self.S, self.U, self.d)
+        # OB_bounds = optimization_utils.bounds_adjust(OB_bounds, self.S, self.U, self.d)
 
         # if provided load WLS license credentials
         if self.license_file:
@@ -286,6 +288,10 @@ class Optimization():
 
                 # construct base model (no semidefinite constraints)
                 model, variables = optimization_utils.base_model(self, model, OB_bounds)
+
+                # write model
+                if self.write_model:
+                    model.write('model.lp')
                 
                 # check feasibility
                 model, status = optimization_utils.optimize(model)
@@ -308,13 +314,13 @@ class Optimization():
                     # check semidefinite feasibility & add cuts if needed
                     model, semidefinite_feas = optimization_utils.semidefinite_cut(self, model, variables)
 
-                    # cut
-                    solution['cuts'] += 1
-
                     # semidefinite feasible: return
                     if semidefinite_feas:
 
                         return solution
+                    
+                    # record cut
+                    solution['cuts'] += 1
                     
                     # semidefinite infeasible: check NLP feasibility with added cut
                     model, status = optimization_utils.optimize(model)
@@ -369,6 +375,7 @@ class BirthDeathOptimization(Optimization):
         K=100,
         silent=True,
         printing=False,
+        write_model=False,
         tqdm_disable=False
         ):
 
@@ -423,6 +430,7 @@ class BirthDeathOptimization(Optimization):
             K,
             silent,
             printing,
+            write_model,
             tqdm_disable
         )
 
@@ -446,6 +454,7 @@ class TelegraphOptimization(Optimization):
         K=100,
         silent=True,
         printing=False,
+        write_model=False,
         tqdm_disable=False
         ):
 
@@ -509,6 +518,7 @@ class TelegraphOptimization(Optimization):
             K,
             silent,
             printing,
+            write_model,
             tqdm_disable
         )
 
@@ -532,6 +542,7 @@ class ModelFreeOptimization(Optimization):
         K=100,
         silent=True,
         printing=False,
+        write_model=False,
         tqdm_disable=False
         ):
 
@@ -574,5 +585,6 @@ class ModelFreeOptimization(Optimization):
             K,
             silent,
             printing,
+            write_model,
             tqdm_disable
         )
