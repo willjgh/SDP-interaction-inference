@@ -97,8 +97,10 @@ class Optimization():
         self.write_model = write_model
         self.tqdm_disable = tqdm_disable
 
-        # debugging
-        self.eigenvalues = []
+        # results
+        self.result_dict      = {}
+        self.eigenvalues_dict = {}
+        self.optim_times_dict = {}
 
         # analyse dataset
         #self.analyse_dataset()
@@ -107,15 +109,17 @@ class Optimization():
     def analyse_dataset(self):
         '''Analyse given dataset using method settings and store results.'''
 
-        # dict to store results
-        solution_dict = {}
-
         # loop over gene pairs in dataset
         for i in tqdm.tqdm(range(self.dataset.gene_pairs), disable=self.tqdm_disable):
 
             # test feasibility of sample i
             try:
-                solution_dict[i] = self.feasibility_test(i)
+                solution, eigenvalues, optim_times = self.feasibility_test(i)
+
+                # store
+                self.result_dict[i]      = solution
+                self.eigenvalues_dict[i] = eigenvalues
+                self.optim_times_dict[i] = optim_times
 
             # if exception
             except Exception as e:
@@ -125,15 +129,13 @@ class Optimization():
                 traceback.print_exception(e)
 
                 # store default result
-                solution_dict[i] = {
+                self.result_dict[i] = {
                     'status': None,
                     'time': None,
                     'cuts': None
                 }
-
-        # store as attribute
-        self.result_dict = solution_dict
-
+                self.eigenvalues_dict[i] = None
+                self.optim_times_dict[i] = None
 
     def feasibility_test_old(self, i):
         '''
@@ -259,6 +261,10 @@ class Optimization():
             dictionary of feasibility status and optimization time
         '''
 
+        # store information from SDP loop
+        eigenvalues = []
+        optim_times = []
+
         # get moment bounds for sample i
         OB_bounds = self.dataset.moment_bounds[f'sample-{i}']
 
@@ -303,21 +309,27 @@ class Optimization():
                     'cuts': 0
                 }
 
+                optim_times.append(solution['time'])
+
                 # no semidefinite constraints or non-optimal solution: return NLP status
                 if not (self.constraints.moment_matrices and status == "OPTIMAL"):
 
-                    return solution
+                    return solution, eigenvalues, optim_times
 
                 # while below time and cut limit
                 while (solution['cuts'] < self.cut_limit) and (solution['time'] < self.total_time_limit):
 
                     # check semidefinite feasibility & add cuts if needed
-                    model, semidefinite_feas = optimization_utils.semidefinite_cut(self, model, variables)
+                    model, semidefinite_feas, evals_data = optimization_utils.semidefinite_cut(self, model, variables)
+
+                    # store eigenvalue & optim time data
+                    eigenvalues.append(evals_data)
+                    optim_times.append(model.Runtime)
 
                     # semidefinite feasible: return
                     if semidefinite_feas:
 
-                        return solution
+                        return solution, eigenvalues, optim_times
                     
                     # record cut
                     solution['cuts'] += 1
@@ -335,7 +347,7 @@ class Optimization():
                         # update solution
                         solution['status'] = status
 
-                        return solution
+                        return solution, eigenvalues, optim_times
 
                 # set custom status
                 if solution['cuts'] >= self.cut_limit:
@@ -353,7 +365,7 @@ class Optimization():
                     print(f"Optimization status: {solution['status']}")
                     print(f"Runtime: {solution['time']}")
 
-                return solution
+                return solution, eigenvalues, optim_times
             
 # ------------------------------------------------
 # Birth-Death Optimization subclass
