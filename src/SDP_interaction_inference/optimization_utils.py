@@ -475,9 +475,8 @@ def semidefinite_cut(opt, model, variables):
         data[s]['evals'] = evals_s
         data[s]['evecs'] = evecs_s
 
-    # record smallest evalues
-    smallest_evals = [data[s]['evals'][0] for s in range(opt.S + 1)]
-    opt.eigenvalues.append(smallest_evals)
+    # extract eigenvalue data
+    evals_data = {s: data[s]['evals'] for s in range(opt.S + 1)}
 
     if opt.printing:
         print("Moment matices eigenvalues:")
@@ -496,7 +495,7 @@ def semidefinite_cut(opt, model, variables):
 
         if opt.printing: print("SDP feasible\n")
     
-        return model, True
+        return model, True, evals_data
 
     # negative eigenvalue
     else:
@@ -523,4 +522,4 @@ def semidefinite_cut(opt, model, variables):
 
         if opt.printing: print("")
 
-    return model, False
+    return model, False, evals_data
