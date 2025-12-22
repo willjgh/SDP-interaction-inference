@@ -428,6 +428,39 @@ def base_model(opt, model, OB_bounds):
     for r, val in opt.fixed:
         model.addConstr(k[r] == val, name=f"k{r}_fixed")
 
+    # fixed correlation
+    if opt.fixed_correlation:
+
+        # get variables
+        powers = utils.compute_powers(opt.S, opt.d)
+        if opt.S == 4:
+            i_xy = powers.index([1, 1, 0, 0])
+            i_x  = powers.index([1, 0, 0, 0])
+            i_y  = powers.index([0, 1, 0, 0])
+            i_x2 = powers.index([2, 0, 0, 0])
+            i_y2 = powers.index([0, 2, 0, 0])
+        elif opt.S == 2:
+            i_xy = powers.index([1, 1])
+            i_x  = powers.index([1, 0])
+            i_y  = powers.index([0, 1])
+            i_x2 = powers.index([2, 0])
+            i_y2 = powers.index([0, 2])
+        var_x = y[i_x2] - y[i_x]**2
+        var_y = y[i_y2] - y[i_y]**2
+        cov_xy = y[i_xy] - y[i_x] * y[i_y]
+
+        # dummy zero variable:
+        # GUROBI only supports non-linear expressions of the form:
+        # variable = f(variables)
+        # so 0 = f(variables) can only be done using a dummy zero variable
+        z = model.addVar()
+        model.addConstr(z == 0, name="Dummy_var")
+        model.addConstr(z == opt.fixed_correlation**2 * var_x * var_y - cov_xy**2, name=f"Correlation_fixed"),
+        if opt.fixed_correlation > 0:
+            model.addConstr(cov_xy >= 0, name=f"Correlation_sign")
+        else:
+            model.addConstr(cov_xy <= 0, name=f"Correlation_sign")
+
     return model, variables
 
 # ------------------------------------------------
@@ -435,14 +468,23 @@ def base_model(opt, model, OB_bounds):
 # ------------------------------------------------
 
 def optimize(model):
-    '''Optimize model with no objective, return status.'''
+    '''Optimize model with no objective, return status & feasible point.'''
 
     # optimize
     model.setObjective(0, GRB.MINIMIZE)
     model.optimize()
     status = status_codes[model.status]
 
-    return model, status
+    # get variable values
+    all_vars = model.getVars()
+    try:
+        values = model.getAttr("X", all_vars)
+    except:
+        values = [None for var in all_vars]
+    names = model.getAttr("VarName", all_vars)
+    var_dict = {name: val for name, val in zip(names, values)}
+
+    return model, status, var_dict
 
 def semidefinite_cut(opt, model, variables):
     '''
@@ -523,3 +565,44 @@ def semidefinite_cut(opt, model, variables):
         if opt.printing: print("")
 
     return model, False, evals_data
+
+# ------------------------------------------------
+# Correlation computation
+# ------------------------------------------------
+
+def compute_feasible_correlation(opt, solution, feasible_values):
+    '''Compute correlation value at feasible point.'''
+
+    # only proceed if feasible point found
+    if not (solution['status'] == "OPTIMAL"):
+        return None
+    
+    # find indices of moments
+    powers = utils.compute_powers(opt.S, opt.d)
+    if opt.S == 4:
+        i_xy = powers.index([1, 1, 0, 0])
+        i_x  = powers.index([1, 0, 0, 0])
+        i_y  = powers.index([0, 1, 0, 0])
+        i_x2 = powers.index([2, 0, 0, 0])
+        i_y2 = powers.index([0, 2, 0, 0])
+    elif opt.S == 2:
+        i_xy = powers.index([1, 1])
+        i_x  = powers.index([1, 0])
+        i_y  = powers.index([0, 1])
+        i_x2 = powers.index([2, 0])
+        i_y2 = powers.index([0, 2])
+
+    # extract feasible point
+    var_dict = feasible_values[-1]
+
+    # collect moment values
+    E_xy = var_dict[f'y[{i_xy}]']
+    E_x  = var_dict[f'y[{i_x}]']
+    E_y  = var_dict[f'y[{i_y}]']
+    E_x2 = var_dict[f'y[{i_x2}]']
+    E_y2 = var_dict[f'y[{i_y2}]']
+
+    # compute correlation
+    correlation = (E_xy - E_x*E_y) / (np.sqrt(E_x2 - E_x**2) * np.sqrt(E_y2 - E_y**2))
+
+    return correlation

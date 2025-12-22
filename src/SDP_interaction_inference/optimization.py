@@ -56,6 +56,7 @@ class Optimization():
         U,
         d,
         fixed,
+        fixed_correlation=None,
         license_file=None,
         time_limit=300,
         total_time_limit=300,
@@ -82,6 +83,7 @@ class Optimization():
         self.U = U
         self.d = d
         self.fixed = fixed
+        self.fixed_correlation = fixed_correlation
 
         # optimization settings
         self.license_file = license_file
@@ -101,6 +103,7 @@ class Optimization():
         self.result_dict      = {}
         self.eigenvalues_dict = {}
         self.optim_times_dict = {}
+        self.feasible_values_dict = {}
 
         # analyse dataset
         #self.analyse_dataset()
@@ -114,12 +117,17 @@ class Optimization():
 
             # test feasibility of sample i
             try:
-                solution, eigenvalues, optim_times = self.feasibility_test(i)
+                solution, eigenvalues, optim_times, feasible_values = self.feasibility_test(i)
+
+                # compute final recovered correlation
+                correlation = optimization_utils.compute_feasible_correlation(self, solution, feasible_values)
+                solution['correlation'] = correlation
 
                 # store
                 self.result_dict[i]      = solution
                 self.eigenvalues_dict[i] = eigenvalues
                 self.optim_times_dict[i] = optim_times
+                self.feasible_values_dict[i] = feasible_values
 
             # if exception
             except Exception as e:
@@ -264,6 +272,7 @@ class Optimization():
         # store information from SDP loop
         eigenvalues = []
         optim_times = []
+        feasible_values = []
 
         # get moment bounds for sample i
         OB_bounds = self.dataset.moment_bounds[f'sample-{i}']
@@ -300,7 +309,7 @@ class Optimization():
                     model.write('model.lp')
                 
                 # check feasibility
-                model, status = optimization_utils.optimize(model)
+                model, status, var_dict = optimization_utils.optimize(model)
 
                 # collect solution information
                 solution = {
@@ -310,11 +319,12 @@ class Optimization():
                 }
 
                 optim_times.append(solution['time'])
+                feasible_values.append(var_dict)
 
                 # no semidefinite constraints or non-optimal solution: return NLP status
                 if not (self.constraints.moment_matrices and status == "OPTIMAL"):
 
-                    return solution, eigenvalues, optim_times
+                    return solution, eigenvalues, optim_times, feasible_values
 
                 # while below time and cut limit
                 while (solution['cuts'] < self.cut_limit) and (solution['time'] < self.total_time_limit):
@@ -329,16 +339,19 @@ class Optimization():
                     # semidefinite feasible: return
                     if semidefinite_feas:
 
-                        return solution, eigenvalues, optim_times
+                        return solution, eigenvalues, optim_times, feasible_values
                     
                     # record cut
                     solution['cuts'] += 1
                     
                     # semidefinite infeasible: check NLP feasibility with added cut
-                    model, status = optimization_utils.optimize(model)
+                    model, status, var_dict = optimization_utils.optimize(model)
 
                     # update optimization time
                     solution['time'] += model.Runtime
+
+                    # store feasible values
+                    feasible_values.append(var_dict)
 
                     # NLP + cut infeasible: return
                     # (also return for any other status, can only proceed if optimal as need feasible point)
@@ -347,7 +360,7 @@ class Optimization():
                         # update solution
                         solution['status'] = status
 
-                        return solution, eigenvalues, optim_times
+                        return solution, eigenvalues, optim_times, feasible_values
 
                 # set custom status
                 if solution['cuts'] >= self.cut_limit:
@@ -365,7 +378,7 @@ class Optimization():
                     print(f"Optimization status: {solution['status']}")
                     print(f"Runtime: {solution['time']}")
 
-                return solution, eigenvalues, optim_times
+                return solution, eigenvalues, optim_times, feasible_values
             
 # ------------------------------------------------
 # Birth-Death Optimization subclass
@@ -378,6 +391,7 @@ class BirthDeathOptimization(Optimization):
         dataset,
         d,
         fixed=None,
+        fixed_correlation=None,
         constraints=None,
         license_file=None,
         time_limit=300,
@@ -434,6 +448,7 @@ class BirthDeathOptimization(Optimization):
             U,
             d,
             fixed,
+            fixed_correlation,
             license_file,
             time_limit,
             total_time_limit,
@@ -457,6 +472,7 @@ class TelegraphOptimization(Optimization):
         dataset,
         d,
         fixed=None,
+        fixed_correlation=None,
         constraints=None,
         license_file=None,
         time_limit=300,
@@ -522,6 +538,7 @@ class TelegraphOptimization(Optimization):
             U,
             d,
             fixed,
+            fixed_correlation,
             license_file,
             time_limit,
             total_time_limit,
@@ -545,6 +562,7 @@ class ModelFreeOptimization(Optimization):
         dataset,
         d,
         fixed=None,
+        fixed_correlation=None,
         constraints=None,
         license_file=None,
         time_limit=300,
@@ -589,6 +607,7 @@ class ModelFreeOptimization(Optimization):
             U,
             d,
             fixed,
+            fixed_correlation,
             license_file,
             time_limit,
             total_time_limit,
