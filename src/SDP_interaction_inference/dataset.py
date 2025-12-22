@@ -32,6 +32,7 @@ class Dataset():
 
         # bootstrap settings
         self.resamples = None
+        self.confidence = None
         self.d = None
 
         # moment bounds
@@ -133,6 +134,7 @@ class Dataset():
             moments = bootstrap.bootstrap(
                 sample,
                 self.d,
+                self.confidence,
                 self.resamples
             )
 
