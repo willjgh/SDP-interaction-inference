@@ -27,7 +27,7 @@ from SDP_interaction_inference import utils
 # Bootstrap moments
 # ------------------------------------------------
 
-def bootstrap(sample, d, resamples=None):
+def bootstrap(sample, d, confidence=None, resamples=None):
     '''
     Compute confidence intervals on the moments of a sample of count pairs, use
     resamples number of bootstrap resamples (default to sample size) and estimate
@@ -36,6 +36,7 @@ def bootstrap(sample, d, resamples=None):
     Args:
         sample: list of tuples (x1, x2) of integer counts per cell
         d: maximum moment order to estimate
+        confidence: confidence level of intervals
         resamples: integer number of bootstrap resamples to use
 
     Returns:
@@ -48,6 +49,9 @@ def bootstrap(sample, d, resamples=None):
     # get bootstrap size: default to sample size
     if resamples is None:
         resamples = n
+    # confidence level: default to 95%
+    if confidence is None:
+        confidence = 0.95
 
     # helpful values
     powers = utils.compute_powers(S=2, d=d)
@@ -89,7 +93,7 @@ def bootstrap(sample, d, resamples=None):
         moment_estimates = np.mean(boot_alpha, axis=1)
 
         # quantile over boot axis (2 x 1)
-        moment_interval = np.quantile(moment_estimates, [0.025, 0.975])
+        moment_interval = np.quantile(moment_estimates, [(confidence / 2), 1 - (confidence / 2)])
 
         # store
         moment_bounds[:, i] = moment_interval
