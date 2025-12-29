@@ -93,7 +93,8 @@ def bootstrap(sample, d, confidence=None, resamples=None):
         moment_estimates = np.mean(boot_alpha, axis=1)
 
         # quantile over boot axis (2 x 1)
-        moment_interval = np.quantile(moment_estimates, [(confidence / 2), 1 - (confidence / 2)])
+        alp = 1 - confidence
+        moment_interval = np.quantile(moment_estimates, [(alp / 2), 1 - (alp / 2)])
 
         # store
         moment_bounds[:, i] = moment_interval
