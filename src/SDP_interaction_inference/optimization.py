@@ -63,9 +63,11 @@ class Optimization():
         eval_eps=10**-6,
         cut_limit=100,
         K=100,
+        function_inj=None,
+        save_model=False,
+        load_model=False,
         silent=True,
         printing=False,
-        write_model=False,
         tqdm_disable=False
         ):
         '''Initialize analysis settings and result storage.'''
@@ -92,11 +94,15 @@ class Optimization():
         self.eval_eps = eval_eps
         self.cut_limit = cut_limit
         self.K = K
+        self.function_inj = function_inj
+
+        # file settings
+        self.save_model = save_model
+        self.load_model = load_model
 
         # display settings
         self.silent = silent
         self.printing = printing
-        self.write_model = write_model
         self.tqdm_disable = tqdm_disable
 
         # results
@@ -280,9 +286,6 @@ class Optimization():
         # raise exception if moments not available
         if self.d > self.dataset.d:
             raise Exception(f"Optimization d = {self.d} too high for dataset d = {self.dataset.d}")
-        
-        # adjust S = 2, U = [] bounds to optimization S, U (up to order d)
-        # OB_bounds = optimization_utils.bounds_adjust(OB_bounds, self.S, self.U, self.d)
 
         # if provided load WLS license credentials
         if self.license_file:
@@ -301,12 +304,33 @@ class Optimization():
             # model context
             with gp.Model('test-SDP', env=env) as model:
 
-                # construct base model (no semidefinite constraints)
-                model, variables = optimization_utils.base_model(self, model, OB_bounds)
+                # if provided: load model
+                if self.load_model:
 
-                # write model
-                if self.write_model:
-                    model.write('model.lp')
+                    # get model
+                    model = gp.read(self.load_model, env)
+
+                    # get variables
+                    Nd = utils.compute_Nd(self.S, self.d)
+                    variables = {
+                        'y': gp.MVar([model.getVarByName(f'y[{i}]') for i in range(Nd)]),
+                        'k': gp.MVar([model.getVarByName(f'k[{i}]') for i in range(self.R)])
+                    }
+                    if self.constraints.moment_matrices:
+                        for s in range(self.S + 1):
+                            M_s = optimization_utils.construct_M_s(variables['y'], s, self.S, self.d)
+                            variables[f'M_{s}'] = M_s
+
+                    # general setup
+                    model.Params.TimeLimit = self.time_limit
+
+                # otherwise: construct base model (no semidefinite constraints)
+                else:
+                    model, variables = optimization_utils.base_model(self, model, OB_bounds)
+
+                # optional function injection to model
+                if self.function_inj:
+                    model, variables = self.function_inj(self, model, variables)
                 
                 # check feasibility
                 model, status, var_dict = optimization_utils.optimize(model)
@@ -324,6 +348,10 @@ class Optimization():
                 # no semidefinite constraints or non-optimal solution: return NLP status
                 if not (self.constraints.moment_matrices and status == "OPTIMAL"):
 
+                    # save final model
+                    if self.save_model:
+                        model.write(self.save_model)
+
                     return solution, eigenvalues, optim_times, feasible_values
 
                 # while below time and cut limit
@@ -338,6 +366,10 @@ class Optimization():
 
                     # semidefinite feasible: return
                     if semidefinite_feas:
+
+                        # save final model
+                        if self.save_model:
+                            model.write(self.save_model)
 
                         return solution, eigenvalues, optim_times, feasible_values
                     
@@ -360,6 +392,10 @@ class Optimization():
                         # update solution
                         solution['status'] = status
 
+                        # save final model
+                        if self.save_model:
+                            model.write(self.save_model)
+
                         return solution, eigenvalues, optim_times, feasible_values
 
                 # set custom status
@@ -377,6 +413,10 @@ class Optimization():
                 if self.printing:
                     print(f"Optimization status: {solution['status']}")
                     print(f"Runtime: {solution['time']}")
+
+                # save final model
+                if self.save_model:
+                    model.write(self.save_model)
 
                 return solution, eigenvalues, optim_times, feasible_values
             
@@ -399,9 +439,11 @@ class BirthDeathOptimization(Optimization):
         eval_eps=10**-6,
         cut_limit=100,
         K=100,
+        function_inj=None,
+        save_model=False,
+        load_model=False,
         silent=True,
         printing=False,
-        write_model=False,
         tqdm_disable=False
         ):
 
@@ -455,9 +497,11 @@ class BirthDeathOptimization(Optimization):
             eval_eps,
             cut_limit,
             K,
+            function_inj,
+            save_model,
+            load_model,
             silent,
             printing,
-            write_model,
             tqdm_disable
         )
 
@@ -480,9 +524,11 @@ class TelegraphOptimization(Optimization):
         eval_eps=10**-6,
         cut_limit=100,
         K=100,
+        function_inj=None,
+        save_model=False,
+        load_model=False,
         silent=True,
         printing=False,
-        write_model=False,
         tqdm_disable=False
         ):
 
@@ -545,9 +591,11 @@ class TelegraphOptimization(Optimization):
             eval_eps,
             cut_limit,
             K,
+            function_inj,
+            save_model,
+            load_model,
             silent,
             printing,
-            write_model,
             tqdm_disable
         )
 
@@ -570,9 +618,11 @@ class ModelFreeOptimization(Optimization):
         eval_eps=10**-6,
         cut_limit=100,
         K=100,
+        function_inj=None,
+        save_model=False,
+        load_model=False,
         silent=True,
         printing=False,
-        write_model=False,
         tqdm_disable=False
         ):
 
@@ -614,8 +664,10 @@ class ModelFreeOptimization(Optimization):
             eval_eps,
             cut_limit,
             K,
+            function_inj,
+            save_model,
+            load_model,
             silent,
             printing,
-            write_model,
             tqdm_disable
         )
