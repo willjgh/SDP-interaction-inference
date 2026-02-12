@@ -608,7 +608,7 @@ def compute_feasible_correlation(opt, solution, feasible_values):
     var_y = E_y2 - E_y**2
 
     # return None if correlation undefined
-    if var_x == 0 or var_y == 0:
+    if var_x <= 0 or var_y <= 0:
         return None
 
     # compute correlation
