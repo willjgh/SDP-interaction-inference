@@ -54,8 +54,11 @@ class Optimization():
         R,
         S,
         U,
-        d,
         fixed,
+        d=None,
+        d_bd=None,
+        d_me=None,
+        d_sd=None,
         fixed_correlation=None,
         license_file=None,
         time_limit=300,
@@ -83,9 +86,22 @@ class Optimization():
         self.R = R
         self.S = S
         self.U = U
-        self.d = d
         self.fixed = fixed
         self.fixed_correlation = fixed_correlation
+
+        # moment order settings
+        if d:
+            self.d = d
+            self.d_bd = d
+            self.d_me = d
+            self.d_sd = d
+        elif d_bd and d_me and s_sd:
+            self.d = max(d_bd, d_me, d_sd)
+            self.d_bd = d_bd
+            self.d_me = d_me
+            self.d_sd = d_sd
+        else:
+            raise Exception(f"No moment order specified")
 
         # optimization settings
         self.license_file = license_file
@@ -429,7 +445,10 @@ class BirthDeathOptimization(Optimization):
     def __init__(
         self,
         dataset,
-        d,
+        d=None,
+        d_bd=None,
+        d_me=None,
+        d_sd=None,
         fixed=None,
         fixed_correlation=None,
         constraints=None,
@@ -488,8 +507,11 @@ class BirthDeathOptimization(Optimization):
             R,
             S,
             U,
-            d,
             fixed,
+            d,
+            d_bd,
+            d_me,
+            d_sd,
             fixed_correlation,
             license_file,
             time_limit,
@@ -514,7 +536,10 @@ class TelegraphOptimization(Optimization):
     def __init__(
         self,
         dataset,
-        d,
+        d=None,
+        d_bd=None,
+        d_me=None,
+        d_sd=None,
         fixed=None,
         fixed_correlation=None,
         constraints=None,
@@ -583,6 +608,9 @@ class TelegraphOptimization(Optimization):
             S,
             U,
             d,
+            d_bd,
+            d_me,
+            d_sd,
             fixed,
             fixed_correlation,
             license_file,
@@ -608,7 +636,10 @@ class ModelFreeOptimization(Optimization):
     def __init__(
         self,
         dataset,
-        d,
+        d=None,
+        d_bd=None,
+        d_me=None,
+        d_sd=None,
         fixed=None,
         fixed_correlation=None,
         constraints=None,
@@ -656,6 +687,9 @@ class ModelFreeOptimization(Optimization):
             S,
             U,
             d,
+            d_bd,
+            d_me,
+            d_sd,
             fixed,
             fixed_correlation,
             license_file,

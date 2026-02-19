@@ -240,6 +240,9 @@ def base_model(opt, model, OB_bounds):
         S: number of species
         U: indices of unobserved species
         d: maximum moment order used
+            d_bd: _ for moment bounds
+            d_me: _ for moment equations
+            d_sd: _ for semidefinite constraints
         fixed: list of pairs of (reaction index r, value to fix k_r to)
         time_limit: optimization time limit
 
@@ -277,7 +280,8 @@ def base_model(opt, model, OB_bounds):
 
         # moment matrices
         for s in range(opt.S + 1):
-            M_s = construct_M_s(y, s, opt.S, opt.d)
+            # restrict to d_sd
+            M_s = construct_M_s(y, s, opt.S, opt.d_sd)
             variables[f'M_{s}'] = M_s
     
     # constraints
@@ -312,8 +316,9 @@ def base_model(opt, model, OB_bounds):
 
         # bound
         O = [i for i in range(opt.S) if i not in opt.U]
-        powers_S = utils.compute_powers(opt.S, opt.d)
-        powers_2 = utils.compute_powers(2, opt.d)
+        # only bound up to order d_bd
+        powers_S = utils.compute_powers(opt.S, opt.d_bd)
+        powers_2 = utils.compute_powers(2, opt.d_bd)
         for i, alpha_S in enumerate(powers_S):
             # check if unobserved moment (non-zero power of unobserved species)
             observed = True
@@ -331,9 +336,12 @@ def base_model(opt, model, OB_bounds):
 
     if opt.constraints.moment_equations:
 
-        # moment equations (order(alpha) <= d - db + 1)
-        moment_powers = utils.compute_powers(opt.S, opt.d - opt.db + 1)
+        # moment equations (order(alpha) <= d_me - db + 1)
+        # d_me = highest order moment present in equations
+        # i.e. moment equation of order(alpha) = d_me - db + 1 will use moment of order d_me (as highest)
+        moment_powers = utils.compute_powers(opt.S, opt.d_me - opt.db + 1)
         for alpha in moment_powers:
+            # compute A as R x N_d, so no need to subset to d_me
             A_alpha_d = compute_A(alpha, opt.reactions, opt.vrs, opt.db, opt.R, opt.S, opt.d)
             model.addConstr(k.T @ A_alpha_d @ y == 0, name=f"ME_{alpha}_{opt.d}")
 
