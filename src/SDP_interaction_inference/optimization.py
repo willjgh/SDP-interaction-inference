@@ -95,7 +95,7 @@ class Optimization():
             self.d_bd = d
             self.d_me = d
             self.d_sd = d
-        elif d_bd and d_me and s_sd:
+        elif d_bd and d_me and d_sd:
             self.d = max(d_bd, d_me, d_sd)
             self.d_bd = d_bd
             self.d_me = d_me
