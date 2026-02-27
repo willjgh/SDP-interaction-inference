@@ -90,12 +90,12 @@ class Optimization():
         self.fixed_correlation = fixed_correlation
 
         # moment order settings
-        if d:
+        if d is not None:
             self.d = d
             self.d_bd = d
             self.d_me = d
             self.d_sd = d
-        elif d_bd and d_me and d_sd:
+        elif (d_bd is not None) and (d_me is not None) and (d_sd is not None):
             self.d = max(d_bd, d_me, d_sd)
             self.d_bd = d_bd
             self.d_me = d_me
@@ -300,8 +300,8 @@ class Optimization():
         OB_bounds = self.dataset.moment_bounds[f'sample-{i}']
 
         # raise exception if moments not available
-        if self.d > self.dataset.d:
-            raise Exception(f"Optimization d = {self.d} too high for dataset d = {self.dataset.d}")
+        if self.d_bd > self.dataset.d:
+            raise Exception(f"Optimization uses bounds on d_bd = {self.d_bd} too high for dataset d = {self.dataset.d}")
 
         # if provided load WLS license credentials
         if self.license_file:
