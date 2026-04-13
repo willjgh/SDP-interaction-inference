@@ -12,6 +12,7 @@ import sympy as sp
 import numpy as np
 import math
 import time
+from mosek.fusion import Expr
 
 status_codes = {
     1: 'LOADED',
@@ -623,3 +624,67 @@ def compute_feasible_correlation(opt, solution, feasible_values):
     correlation = cov_xy / (np.sqrt(var_x) * np.sqrt(var_y))
 
     return correlation
+    
+# ------------------------------------------------
+# MOSEK helper functions
+# ------------------------------------------------
+
+def MOSEK_construct_M_s(y, s, S, d):
+    '''Moment matrix variable constructor (s).'''
+    if s == 0:
+        D = math.floor(d / 2)
+    else:
+        D = math.floor((d - 1) / 2)
+    powers_D = utils.compute_powers(S, D)
+    powers_d = utils.compute_powers(S, d)
+    ND = utils.compute_Nd(S, D)
+    M_s = []
+    e_s = [1 if i == (s - 1) else 0 for i in range(S)]
+    for alpha_index, alpha in enumerate(powers_D):
+        for beta_index, beta in enumerate(powers_D):
+            plus = utils.add_powers(alpha, beta, e_s, S=S)
+            plus_index = powers_d.index(plus)
+            M_s.append(y[plus_index])
+    M_s = Expr.reshape(Expr.vstack(M_s), [ND, ND])
+    return M_s
+
+def compute_M_s_value(y, s, S, d):
+    '''Moment matrix value (s).'''
+    if s == 0:
+        D = math.floor(d / 2)
+    else:
+        D = math.floor((d - 1) / 2)
+    powers_D = utils.compute_powers(S, D)
+    powers_d = utils.compute_powers(S, d)
+    ND = utils.compute_Nd(S, D)
+    M_s = np.zeros((ND, ND))
+    e_s = [1 if i == (s - 1) else 0 for i in range(S)]
+    for alpha_index, alpha in enumerate(powers_D):
+        for beta_index, beta in enumerate(powers_D):
+            plus = utils.add_powers(alpha, beta, e_s, S=S)
+            plus_index = powers_d.index(plus)
+            M_s[alpha_index, beta_index] = y[plus_index]
+    return M_s
+
+def MOSEK_compute_feasible_correlation(S, d, y):
+    '''Compute correlation value at feasible point.'''
+
+    # find indices of moments
+    powers = utils.compute_powers(S, d)
+    i_xy = powers.index([1, 1])
+    i_x  = powers.index([1, 0])
+    i_y  = powers.index([0, 1])
+    i_x2 = powers.index([2, 0])
+    i_y2 = powers.index([0, 2])
+
+    # collect moment values
+    E_xy = y[i_xy]
+    E_x  = y[i_x]
+    E_y  = y[i_y]
+    E_x2 = y[i_x2]
+    E_y2 = y[i_y2]
+
+    # compute correlation
+    correlation = (E_xy - E_x*E_y) / (np.sqrt(E_x2 - E_x**2) * np.sqrt(E_y2 - E_y**2))
+
+    return float(correlation)
