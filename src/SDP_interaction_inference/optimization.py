@@ -495,7 +495,7 @@ class BirthDeathOptimization(Optimization):
             )
 
         # default fixed values if not modified
-        if not fixed:
+        if fixed is None:
             fixed = [(1, 1)]
 
         super().__init__(
@@ -595,7 +595,7 @@ class TelegraphOptimization(Optimization):
             )
 
         # default fixed values if not modified
-        if not fixed:
+        if fixed is None:
             fixed = [(3, 1)]
 
         super().__init__(
@@ -674,7 +674,7 @@ class ModelFreeOptimization(Optimization):
             )
 
         # default fixed values if not modified
-        if not fixed:
+        if fixed is None:
             fixed = []
 
         super().__init__(
