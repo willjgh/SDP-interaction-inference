@@ -188,9 +188,12 @@ class MOSEKModelFreeInteracting():
             if self.method_opt == "single":
 
                 # single feasible point
-                md.objective(0)
-                md.solve()
-                feasible_points = [y.level()]
+                try:
+                    md.objective(0)
+                    md.solve()
+                    feasible_points = [y.level()]
+                except SolutionError:
+                    pass
 
             elif self.method_opt == "index":
 
@@ -198,14 +201,20 @@ class MOSEKModelFreeInteracting():
                 for i in range(self.Nd):
                     
                     # minimize
-                    md.objective(ObjectiveSense.Minimize, y[i])
-                    md.solve()
-                    feasible_points.append(y.level())
+                    try:
+                        md.objective(ObjectiveSense.Minimize, y[i])
+                        md.solve()
+                        feasible_points.append(y.level())
+                    except SolutionError:
+                        pass
 
                     # maximize
-                    md.objective(ObjectiveSense.Maximize, y[i])
-                    md.solve()
-                    feasible_points.append(y.level())
+                    try:
+                        md.objective(ObjectiveSense.Maximize, y[i])
+                        md.solve()
+                        feasible_points.append(y.level())
+                    except SolutionError:
+                        pass
 
             elif self.method_opt == "random":
 
@@ -216,12 +225,15 @@ class MOSEKModelFreeInteracting():
                 y_feas = []
 
                 for i in range(self.N):
-                    c = np.zeros(self.Nd)
-                    c[:self.Nbd] = rng.uniform(-1, 1, size=self.Nbd)
-                    md.objective(ObjectiveSense.Minimize, y.T @ c)
-                    md.solve()
-                    feasible_points.append(y.level())
-            
+                    try:
+                        c = np.zeros(self.Nd)
+                        c[:self.Nbd] = rng.uniform(-1, 1, size=self.Nbd)
+                        md.objective(ObjectiveSense.Minimize, y.T @ c)
+                        md.solve()
+                        feasible_points.append(y.level())
+                    except SolutionError:
+                        pass
+
             elif self.method_opt == "random_2":
 
                 # optimize random linear objectives: only including order <2 moments
@@ -232,12 +244,15 @@ class MOSEKModelFreeInteracting():
 
                 N2 = utils.compute_Nd(self.S, 2)
                 for i in range(self.N):
-                    c = np.zeros(self.Nd)
-                    c[:N2] = rng.uniform(-1, 1, size=N2)
-                    md.objective(ObjectiveSense.Minimize, y.T @ c)
-                    md.solve()
-                    feasible_points.append(y.level())
-
+                    try:
+                        c = np.zeros(self.Nd)
+                        c[:N2] = rng.uniform(-1, 1, size=N2)
+                        md.objective(ObjectiveSense.Minimize, y.T @ c)
+                        md.solve()
+                        feasible_points.append(y.level())
+                    except SolutionError:
+                        pass
+                    
         return feasible_points
 
     def hit_and_run(self, i, y_feas):
@@ -292,8 +307,10 @@ class MOSEKModelFreeInteracting():
             for i in range(1, self.Nd):
                 if Bv[i] > 0:
                     t_linear[i, :] = [l[i] / Bv[i], u[i] / Bv[i]]
-                else:
+                elif Bv[i] < 0:
                     t_linear[i, :] = [u[i] / Bv[i], l[i] / Bv[i]]
+                else:
+                    t_linear[i, :] = [-np.inf, np.inf]
 
             # semidefinite t range
             t_semi = np.zeros((self.S + 1, 2))
