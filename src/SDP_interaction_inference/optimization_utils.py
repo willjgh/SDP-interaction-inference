@@ -684,7 +684,16 @@ def MOSEK_compute_feasible_correlation(S, d, y):
     E_x2 = y[i_x2]
     E_y2 = y[i_y2]
 
+    # compute statistics
+    cov_xy = E_xy - E_x*E_y
+    var_x = E_x2 - E_x**2
+    var_y = E_y2 - E_y**2
+
+    # return None if correlation undefined
+    if var_x <= 0 or var_y <= 0:
+        return None
+
     # compute correlation
-    correlation = (E_xy - E_x*E_y) / (np.sqrt(E_x2 - E_x**2) * np.sqrt(E_y2 - E_y**2))
+    correlation = cov_xy / (np.sqrt(var_x) * np.sqrt(var_y))
 
     return float(correlation)
