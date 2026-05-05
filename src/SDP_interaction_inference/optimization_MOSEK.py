@@ -284,8 +284,11 @@ class MOSEKModelFreeInteracting():
             # get current feasible point
             y_feas = feasible_points[-1]
 
+            # get number of feasible points (may be less than n)
+            m = len(feasible_points)
+
             # sample random direction
-            if self.method_HAR == "sphere" or (self.method_HAR == "ACHR" and n < self.ACHR_warmup):
+            if self.method_HAR == "sphere" or (self.method_HAR == "ACHR" and m < self.ACHR_warmup):
 
                 # uniform on sphere
                 v = rng.multivariate_normal(np.zeros(self.Nd), np.diag(np.ones(self.Nd)))
@@ -301,7 +304,7 @@ class MOSEKModelFreeInteracting():
             elif self.method_HAR == "ACHR":
 
                 # sample index
-                i = rng.integers(n)
+                i = rng.integers(m)
 
                 # set direction as from center to ith point
                 v = feasible_points[i] - center
@@ -384,6 +387,6 @@ class MOSEKModelFreeInteracting():
             if self.method_HAR == "ACHR":
 
                 # update center
-                center = (n * center + y_feas_new) / (n + 1)
+                center = (m * center + y_feas_new) / (m + 1)
 
         return feasible_points, t_int_err, t_int_eps
