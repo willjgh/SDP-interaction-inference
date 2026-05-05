@@ -279,7 +279,7 @@ class MOSEKModelFreeInteracting():
             center = y_feas
 
         # repeats
-        for n in range(self.N - 1):
+        for n in range(1, self.N):
 
             # get current feasible point
             y_feas = feasible_points[-1]
@@ -290,6 +290,26 @@ class MOSEKModelFreeInteracting():
                 # uniform on sphere
                 v = rng.multivariate_normal(np.zeros(self.Nd), np.diag(np.ones(self.Nd)))
                 v = v / np.linalg.norm(v)
+
+            elif self.method_HAR == "coordinate":
+
+                # sample random coordinate: except 1st dimension as fixed y[0] = 1
+                vi = rng.integers(1, self.Nd)
+                v = np.zeros(self.Nd)
+                v[vi] = 1
+
+            elif self.method_HAR == "ACHR":
+
+                # sample index
+                i = rng.integers(n)
+
+                # set direction as from center to ith point
+                v = feasible_points[i] - center
+                v = v / np.linalg.norm(v)
+
+            else:
+
+                raise Exception("Invalid Hit and Run method")
 
             # ignore 1st dimension as fixed y[0] = 1
             v[0] = 0
@@ -360,5 +380,10 @@ class MOSEKModelFreeInteracting():
 
             # store
             feasible_points.append(y_feas_new)
+
+            if self.method_HAR == "ACHR":
+
+                # update center
+                center = (n * center + y_feas_new) / (n + 1)
 
         return feasible_points, t_int_err, t_int_eps
