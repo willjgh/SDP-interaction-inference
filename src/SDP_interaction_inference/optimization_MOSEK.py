@@ -285,7 +285,7 @@ class MOSEKModelFreeInteracting():
             y_feas = feasible_points[-1]
 
             # sample random direction
-            if self.method_HAR == "sphere" or (self.method_HAR == "ACHR" and n < self.warmup):
+            if self.method_HAR == "sphere" or (self.method_HAR == "ACHR" and n < self.ACHR_warmup):
 
                 # uniform on sphere
                 v = rng.multivariate_normal(np.zeros(self.Nd), np.diag(np.ones(self.Nd)))
