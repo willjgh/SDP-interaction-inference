@@ -576,7 +576,7 @@ def semidefinite_cut(opt, model, variables):
     return model, False, evals_data
 
 # ------------------------------------------------
-# Correlation computation
+# Statistic computation
 # ------------------------------------------------
 
 def compute_feasible_correlation(opt, solution, feasible_values):
@@ -624,6 +624,51 @@ def compute_feasible_correlation(opt, solution, feasible_values):
     correlation = cov_xy / (np.sqrt(var_x) * np.sqrt(var_y))
 
     return correlation
+
+def compute_feasible_fano_factors(opt, solution, feasible_values):
+    '''Compute fano factor values at feasible point.'''
+
+    # only proceed if feasible point found
+    if not (solution['status'] == "OPTIMAL"):
+        return None
+    
+    # find indices of moments
+    powers = utils.compute_powers(opt.S, opt.d)
+    if opt.S == 4:
+        i_x  = powers.index([1, 0, 0, 0])
+        i_y  = powers.index([0, 1, 0, 0])
+        i_x2 = powers.index([2, 0, 0, 0])
+        i_y2 = powers.index([0, 2, 0, 0])
+    elif opt.S == 2:
+        i_x  = powers.index([1, 0])
+        i_y  = powers.index([0, 1])
+        i_x2 = powers.index([2, 0])
+        i_y2 = powers.index([0, 2])
+
+    # extract feasible point
+    var_dict = feasible_values[-1]
+
+    # collect moment values
+    E_x  = var_dict[f'y[{i_x}]']
+    E_y  = var_dict[f'y[{i_y}]']
+    E_x2 = var_dict[f'y[{i_x2}]']
+    E_y2 = var_dict[f'y[{i_y2}]']
+
+    # compute statistics
+    var_x = E_x2 - E_x**2
+    var_y = E_y2 - E_y**2
+
+    # undefined for zero mean
+    if E_x == 0:
+        fano_1 = None
+    else:
+        fano_1 = var_x / E_x
+    if E_y == 0:
+        fano_2 = None
+    else:
+        fano_2 = var_y / E_y
+
+    return float(fano_1), float(fano_2)
     
 # ------------------------------------------------
 # MOSEK helper functions
@@ -697,3 +742,35 @@ def MOSEK_compute_feasible_correlation(S, d, y):
     correlation = cov_xy / (np.sqrt(var_x) * np.sqrt(var_y))
 
     return float(correlation)
+
+def MOSEK_compute_feasible_fano_factors(S, d, y):
+    '''Compute fano factor values at feasible point.'''
+
+    # find indices of moments
+    powers = utils.compute_powers(S, d)
+    i_x  = powers.index([1, 0])
+    i_y  = powers.index([0, 1])
+    i_x2 = powers.index([2, 0])
+    i_y2 = powers.index([0, 2])
+
+    # collect moment values
+    E_x  = y[i_x]
+    E_y  = y[i_y]
+    E_x2 = y[i_x2]
+    E_y2 = y[i_y2]
+
+    # compute statistics
+    var_x = E_x2 - E_x**2
+    var_y = E_y2 - E_y**2
+
+    # undefined for zero mean
+    if E_x == 0:
+        fano_1 = None
+    else:
+        fano_1 = var_x / E_x
+    if E_y == 0:
+        fano_2 = None
+    else:
+        fano_2 = var_y / E_y
+
+    return float(fano_1), float(fano_2)

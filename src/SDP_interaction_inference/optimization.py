@@ -145,10 +145,15 @@ class Optimization():
                 correlation = optimization_utils.compute_feasible_correlation(self, solution, feasible_values)
                 solution['correlation'] = correlation
 
+                # compute final recovered fano factors
+                fano_1, fano_2 = optimization_utils.compute_feasible_fano_factors(self, solution, feasible_values)
+                solution['fano_1'] = fano_1
+                solution['fano_2'] = fano_2
+
                 # store
-                self.result_dict[i]      = solution
-                self.eigenvalues_dict[i] = eigenvalues
-                self.optim_times_dict[i] = optim_times
+                self.result_dict[i]          = solution
+                self.eigenvalues_dict[i]     = eigenvalues
+                self.optim_times_dict[i]     = optim_times
                 self.feasible_values_dict[i] = feasible_values
 
             # if exception

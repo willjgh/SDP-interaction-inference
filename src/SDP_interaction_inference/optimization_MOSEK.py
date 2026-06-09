@@ -96,11 +96,18 @@ class MOSEKModelFreeInteracting():
 
                 # compute feasible correlations
                 feasible_correlations = [optimization_utils.MOSEK_compute_feasible_correlation(self.S, self.d, y) for y in feasible_points]
+                
+                # compute feasible fano factors
+                feasible_fano_factors = [optimization_utils.MOSEK_compute_feasible_fano_factors(self.S, self.d, y) for y in feasible_points]
+                feasible_fano_factors_1 = [fano[0] for fano in feasible_fano_factors]
+                feasible_fano_factors_2 = [fano[1] for fano in feasible_fano_factors]
 
                 # store
                 self.result_dict_optimization[i] = {
                     'feasible_points': feasible_points,
-                    'feasible_correlations': feasible_correlations
+                    'feasible_correlations': feasible_correlations,
+                    'feasible_fano_factors_1': feasible_fano_factors_1,
+                    'feasible_fano_factors_2': feasible_fano_factors_2
                 }
 
                 # Hit and Run from single feasible point
@@ -112,10 +119,17 @@ class MOSEKModelFreeInteracting():
                     # compute feasible correlations
                     feasible_correlations_HAR = [optimization_utils.MOSEK_compute_feasible_correlation(self.S, self.d, y) for y in feasible_points_HAR]
 
+                    # compute feasible fano factors
+                    feasible_fano_factors_HAR = [optimization_utils.MOSEK_compute_feasible_fano_factors(self.S, self.d, y) for y in feasible_points_HAR]
+                    feasible_fano_factors_HAR_2 = [fano[0] for fano in feasible_fano_factors_HAR]
+                    feasible_fano_factors_HAR_1 = [fano[1] for fano in feasible_fano_factors_HAR]
+
                     # store
                     self.result_dict_HAR[i] = {
                         'feasible_points': feasible_points_HAR,
                         'feasible_correlations': feasible_correlations_HAR,
+                        'feasible_fano_factors_1': feasible_fano_factors_HAR_1,
+                        'feasible_fano_factors_2': feasible_fano_factors_HAR_2,
                         'err': t_int_err,
                         'eps': t_int_eps
                     }
@@ -130,11 +144,15 @@ class MOSEKModelFreeInteracting():
                 # store default result
                 self.result_dict_optimization[i] = {
                     'feasible_points': None,
-                    'feasible_correlations': None
+                    'feasible_correlations': None,
+                    'feasible_fano_factors_1': None,
+                    'feasible_fano_factors_2': None
                 }
                 self.result_dict_HAR[i] = {
                         'feasible_points': None,
                         'feasible_correlations': None,
+                        'feasible_fano_factors_1': None,
+                        'feasible_fano_factors_2': None,
                         'err': None,
                         'eps': None
                     }
