@@ -7,9 +7,11 @@ Module implementing class to handle datasets and related settings.
 # ------------------------------------------------
 
 from SDP_interaction_inference import bootstrap
+from SDP_interaction_inference import utils
 import pandas as pd
 import numpy as np
 import tqdm
+import scipy
 
 # ------------------------------------------------
 # Dataset class
@@ -136,6 +138,93 @@ class Dataset():
                 self.d,
                 self.confidence,
                 self.resamples
+            )
+
+            # store moments
+            self.moment_bounds[f'sample-{i}'] = moments
+
+# ------------------------------------------------
+# Sparse Dataset class
+# ------------------------------------------------
+
+class SparseDataset():
+    def __init__(self):
+        '''Initialise dataset settings'''
+
+        # data
+        self.miRNA_dataset = None
+        self.pcRNA_dataset = None
+
+        # size
+        self.cells = None
+        self.gene_pairs = None
+        self.pair_indices = None
+        self.single_miRNA = None
+
+        # capture efficiency
+        self.beta = None
+
+        # bootstrap settings
+        self.resamples = None
+        self.confidence = None
+        self.d = None
+
+        # moment bounds
+        self.moment_bounds = {}
+    
+    def construct_dataset(self, miRNA_adata, pcRNA_adata, beta, pair_indices=None):
+        '''Setup object given data.'''
+
+        # store objects
+        self.miRNA_dataset = miRNA_adata.X
+        self.pcRNA_dataset = pcRNA_adata.X
+        self.beta = beta
+
+        # gene pairs by indices
+        if pair_indices is None:
+            pair_indices = [[0, i] for i in range(pcRNA_adata.n_vars)]
+        self.pair_indices = pair_indices
+
+        # size
+        self.cells = pcRNA_adata.n_obs
+        self.gene_pairs = len(pair_indices)
+    
+    def bootstrap(self, d, confidence=0.95, resamples=1000, tqdm_disable=True):
+        '''
+        For each sample in dataset compute bootstrap CI bounds on moments.
+
+        Args:
+            d: maximum moment order to estimate
+        '''
+
+        # store
+        self.d = d
+        self.confidence = confidence
+        self.resamples = resamples
+
+        # helpful objects
+        self.rng = np.random.default_rng()
+        self.powers = utils.compute_powers(S=2, d=d)
+        self.Nd = utils.compute_Nd(S=2, d=d)
+
+        # convert to sparse column array for faster slicing
+        Xmi = self.miRNA_dataset.tocsc()
+        Xpc = self.pcRNA_dataset.tocsc()
+
+        # loop over pairds
+        for i, pair in tqdm.tqdm(enumerate(self.pair_indices), disable=tqdm_disable, total=len(self.pair_indices)):
+
+            # select samples
+            miRNA_sample = Xmi[:, pair[0]]
+            pcRNA_sample = Xpc[:, pair[1]]
+
+            # combine
+            sample = scipy.sparse.hstack([miRNA_sample, pcRNA_sample])
+
+            # bootstrap moments
+            moments = bootstrap.sparse_bootstrap(
+                self,
+                sample
             )
 
             # store moments

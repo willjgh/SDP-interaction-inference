@@ -100,3 +100,54 @@ def bootstrap(sample, d, confidence=None, resamples=None):
         moment_bounds[:, i] = moment_interval
 
     return moment_bounds
+
+# ------------------------------------------------
+# Sparse Bootstrap
+# ------------------------------------------------
+
+def sparse_bootstrap(dataset, sample):
+    '''
+    Compute confidence intervals on the moments of a sample of count pairs, use
+    resamples number of bootstrap resamples (default to sample size) and estimate
+    moments up to order d.
+
+    Args:
+        dataset: stores settings such as
+            d: maximum moment order to estimate
+            confidence: confidence level of intervals
+            resamples: integer number of bootstrap resamples to use
+        sample: n (cells) x 2 sparse matrix of integer count pairs per cell
+
+    Returns:
+        (2 x Nd) numpy array of CI bounds on each Nd moment of order <= d
+    '''
+
+    # bootstrap to N x n x 2 array
+    boot = dataset.rng.choice(sample.toarray(), size=(dataset.resamples, dataset.cells))
+
+    # split into 2 N x n arrays 
+    x1_boot = boot[:, :, 0]
+    x2_boot = boot[:, :, 1]
+
+    # estimate
+    moment_bounds = np.zeros((2, dataset.Nd))
+    for i, alpha in enumerate(dataset.powers):
+
+        # raise boot to powers
+        x1_boot_alpha = x1_boot**alpha[0]
+        x2_boot_alpha = x2_boot**alpha[1]
+
+        # multiply (N x n)
+        boot_alpha = x1_boot_alpha * x2_boot_alpha
+
+        # mean over sample axis (N x 1)
+        moment_estimates = np.mean(boot_alpha, axis=1)
+
+        # quantile over boot axis (2 x 1)
+        alpha = 1 - dataset.confidence
+        moment_interval = np.quantile(moment_estimates, [(alpha / 2), 1 - (alpha / 2)])
+
+        # store
+        moment_bounds[:, i] = moment_interval
+
+    return moment_bounds
