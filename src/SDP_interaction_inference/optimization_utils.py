@@ -630,7 +630,7 @@ def compute_feasible_fano_factors(opt, solution, feasible_values):
 
     # only proceed if feasible point found
     if not (solution['status'] == "OPTIMAL"):
-        return None
+        return None, None
     
     # find indices of moments
     powers = utils.compute_powers(opt.S, opt.d)
